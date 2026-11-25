@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Render the make.fun news-image-20261125 magazine entry (1024x1024).
 
-Fresh build for the 25 November 2026 bounty. Magazine concept:
-'THE WORLD TODAY' masthead, cover 'THE BURNING SEA', 8 feature tiles
+Fresh build for the 25 November 2026 bounty. Magazine concept, revised
+per the user's direction: the masthead is the date itself
+('WEDNESDAY 25 NOVEMBER 2026') in a Vogue-style Didone serif
+(Playfair Display), with the cover title 'THE BURNING SEA' below it
+on the cream page background — no red masthead band, no dateline
+strip, no headline overlaid on the cover photo. 8 feature tiles
 with photos, and an ALSO ON TODAY list with all 16 remaining stories.
 All photos are Wikimedia Commons, credited in README.md.
 """
@@ -14,6 +18,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PHOTOS = os.path.join(HERE, "photos")
 
 # Palette: bright magazine red / yellow / blue on cream paper.
+# (Red is kept only as a small accent — headlines, bullets, footer —
+# never as a header background.)
 RED = (210, 31, 43)
 YELLOW = (255, 196, 0)
 BLUE = (11, 61, 145)
@@ -28,10 +34,32 @@ BLACK = os.path.join(FONT_DIR, "NotoSans-Black.ttf")
 BOLD = os.path.join(FONT_DIR, "NotoSans-Bold.ttf")
 REG = os.path.join(FONT_DIR, "NotoSans-Regular.ttf")
 ITAL = os.path.join(FONT_DIR, "NotoSans-Italic.ttf")
+# Vogue-style Didone serif (Playfair Display, OFL) for date + title.
+DIDONE = os.path.join(HERE, "fonts", "PlayfairDisplay.ttf")
 
 
 def font(path, size):
     return ImageFont.truetype(path, size)
+
+
+def didone(size, weight="Bold"):
+    """Playfair Display at the named variable-font weight."""
+    fnt = ImageFont.truetype(DIDONE, size)
+    try:
+        fnt.set_variation_by_name(weight)
+    except Exception:
+        pass
+    return fnt
+
+
+def fit_font(draw, text, make, size, max_w, min_size=20):
+    """Shrink a font until text fits max_w; returns (font, size)."""
+    while size > min_size:
+        fnt = make(size)
+        if draw.textlength(text, font=fnt) <= max_w:
+            return fnt, size
+        size -= 2
+    return make(min_size), min_size
 
 
 def wrap(draw, text, fnt, max_w):
@@ -82,54 +110,45 @@ def main():
     img = Image.new("RGB", (W, H), CREAM)
     d = ImageDraw.Draw(img)
 
-    # ---- Masthead -------------------------------------------------------
-    d.rectangle([0, 0, W, 62], fill=RED)
-    f_mast = font(BLACK, 46)
-    d.text((W // 2, 31), "THE WORLD TODAY", font=f_mast, fill=WHITE, anchor="mm")
-    d.rectangle([0, 62, W, 64], fill=YELLOW)
+    # ---- Masthead: the date itself, Vogue-style Didone serif ------------
+    # No coloured band — the date sits on the cream page background.
+    f_date, _ = fit_font(d, "WEDNESDAY 25 NOVEMBER 2026",
+                         lambda s: didone(s, "Bold"), 52, 980)
+    d.text((W // 2, 40), "WEDNESDAY 25 NOVEMBER 2026", font=f_date,
+           fill=INK, anchor="mm")
 
-    # ---- Dateline strip --------------------------------------------------
-    d.rectangle([0, 64, W, 90], fill=YELLOW)
-    f_date = font(BOLD, 20)
-    d.text((14, 77), "WEDNESDAY 25 NOVEMBER 2026", font=f_date, fill=INK, anchor="lm")
-    f_tag = font(BOLD, 15)
-    d.text((W - 14, 77), "WORLD NEWS IN ONE IMAGE", font=f_tag, fill=INK, anchor="rm")
+    # ---- Cover title below the date --------------------------------------
+    f_title, _ = fit_font(d, "THE BURNING SEA",
+                          lambda s: didone(s, "Bold"), 72, 960)
+    d.text((W // 2, 100), "THE BURNING SEA", font=f_title,
+           fill=INK, anchor="mm")
+    f_titsub = font(BOLD, 19)
+    d.text((W // 2, 144), "Ukraine's drone war spreads to two more seas",
+           font=f_titsub, fill=INK, anchor="mm")
+    # thin hairline rule, Vogue-style
+    d.line([(28, 164), (W - 28, 164)], fill=(60, 60, 60), width=2)
 
-    # ---- Cover photo -----------------------------------------------------
-    paste_photo(img, os.path.join(PHOTOS, "cover.jpg"), (0, 90, W, 360))
-    # dark gradient at the bottom of the cover for the headline
-    grad = Image.new("RGBA", (W, 120), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(grad)
-    for i in range(120):
-        alpha = int(190 * (i / 119) ** 1.4)
-        gd.line([(0, i), (W, i)], fill=(0, 0, 0, alpha))
-    img.paste(grad, (0, 240), grad)
+    # ---- Cover photo (clean — no headline overlaid on it) ----------------
+    paste_photo(img, os.path.join(PHOTOS, "cover.jpg"), (0, 176, W, 396))
     d = ImageDraw.Draw(img)
-    f_cov = font(BLACK, 62)
-    d.text((16, 296), "THE BURNING SEA", font=f_cov, fill=WHITE, anchor="lm",
-           stroke_width=2, stroke_fill=(0, 0, 0))
-    f_covsub = font(BOLD, 19)
-    d.text((16, 336), "Ukraine's drone war spreads to two more seas",
-           font=f_covsub, fill=(255, 230, 120), anchor="lm",
-           stroke_width=1, stroke_fill=(0, 0, 0))
 
     # ---- Cover deck ------------------------------------------------------
     f_deck = font(REG, 18)
     deck = ("A Russian warship sunk off Libya, a cargo ship hit in the Gulf of Finland, "
             "a container ship targeted near Hormuz.")
     lines = wrap(d, deck, f_deck, W - 28)
-    y = 372
+    y = 406
     for ln in lines:
         d.text((14, y), ln, font=f_deck, fill=INK)
         y += 22
     f_note = font(ITAL, 13)
-    d.text((14, 414), "Strikes on 21–22 Nov, confirmed 23 Nov — the fallout continues today.",
+    d.text((14, 454), "Strikes on 21–22 Nov, confirmed 23 Nov — the fallout continues today.",
            font=f_note, fill=GREY)
 
     # ---- Features header -------------------------------------------------
-    d.rectangle([0, 436, W, 460], fill=BLUE)
+    d.rectangle([0, 476, W, 500], fill=BLUE)
     f_sec = font(BOLD, 17)
-    d.text((14, 448), "TODAY'S BIG STORIES", font=f_sec, fill=WHITE, anchor="lm")
+    d.text((14, 488), "TODAY'S BIG STORIES", font=f_sec, fill=WHITE, anchor="lm")
 
     # ---- 8 feature tiles -------------------------------------------------
     features = [
@@ -150,31 +169,31 @@ def main():
         ("f8_ebola.jpg", "EBOLA TEAM RESCUED",
          "WHO staff evacuated from a Congo hospital after three days of fighting.", "center"),
     ]
-    tile_w, tile_h, gap = 244, 124, 12
-    x0, y0 = 6, 468
+    tile_w, tile_h, gap = 244, 110, 12
+    x0, y0 = 6, 508
     f_th = font(BOLD, 15)
     f_td = font(REG, 12)
     for i, (photo, head, desc, focus) in enumerate(features):
         col, row = i % 4, i // 4
         x = x0 + col * (tile_w + gap)
         yy = y0 + row * (tile_h + gap)
-        paste_photo(img, os.path.join(PHOTOS, photo), (x, yy, x + tile_w, yy + 58),
+        paste_photo(img, os.path.join(PHOTOS, photo), (x, yy, x + tile_w, yy + 52),
                     focus=focus)
         d = ImageDraw.Draw(img)
         # headline: one line, shrink if needed
         hs = 15
         while d.textlength(head, font=font(BOLD, hs)) > tile_w and hs > 11:
             hs -= 1
-        d.text((x, yy + 62), head, font=font(BOLD, hs), fill=RED)
+        d.text((x, yy + 56), head, font=font(BOLD, hs), fill=RED)
         dlines = wrap(d, desc, f_td, tile_w)
-        dy = yy + 62 + hs + 4
+        dy = yy + 56 + hs + 3
         for ln in dlines[:2]:
             d.text((x, dy), ln, font=f_td, fill=INK)
             dy += 15
 
     # ---- ALSO ON header --------------------------------------------------
-    d.rectangle([0, 728, W, 752], fill=BLUE)
-    d.text((14, 740), "ALSO ON TODAY", font=f_sec, fill=WHITE, anchor="lm")
+    d.rectangle([0, 746, W, 770], fill=BLUE)
+    d.text((14, 758), "ALSO ON TODAY", font=f_sec, fill=WHITE, anchor="lm")
 
     # ---- ALSO ON list: 16 items, 2 columns x 8 rows ---------------------
     also = [
@@ -196,18 +215,18 @@ def main():
         ("Anthropic sinks below IPO price", "Shares −6.54% to $81.90, under the $83 IPO price, as AI stocks sell off."),
     ]
     f_at = font(BOLD, 13)
-    f_ad = font(REG, 11.5)
+    f_ad = font(REG, 11)
     col_w = (W - 24 - 20) // 2
-    row_h = 30
+    row_h = 27
     for i, (title, desc) in enumerate(also):
         col, row = i % 2, i // 2
         x = 12 + col * (col_w + 20)
-        yy = 760 + row * row_h
+        yy = 778 + row * row_h
         # red bullet square
         d.rectangle([x, yy + 3, x + 7, yy + 10], fill=RED)
         d.text((x + 12, yy), title, font=f_at, fill=INK)
         dlines = wrap(d, desc, f_ad, col_w - 12)
-        d.text((x + 12, yy + 15), dlines[0] if dlines else "", font=f_ad, fill=GREY)
+        d.text((x + 12, yy + 14), dlines[0] if dlines else "", font=f_ad, fill=GREY)
 
     # ---- Footer ----------------------------------------------------------
     d.rectangle([0, 1000, W, H], fill=RED)
